@@ -72,35 +72,35 @@ pygame.display.set_icon(pygame.image.load('icon.png')) #Set icon
 
 logo=[pygame.image.load('logo/logosubless.png'), pygame.image.load('logo/logoSUB.png'), pygame.image.load('logo/logoBGless.png')]
 
-for i in range(500):
-    win.fill(LOGORED)
-    if i<=100:
-        win.blit(logo[0], (int(w/2)-168, int(h/2)-48))
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                run = False
-                quit()
-    elif i<200:
-        subLength = int(w/2)-168+40
-        subHeight = int(h/2)-40
-        win.blit(logo[0], (int(w/2)-168, int(h/2)-48))
-        win.blit(logo[1], (subLength, (subHeight*i / 100)-subHeight))
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                run = False
-                quit()
-    elif i<500:
-        win.blit(logo[0], (int(w/2)-168, int(h/2)-48))
-        win.blit(logo[1], (subLength, (subHeight*200 / 100)-subHeight))
-        for event in pygame.event.get():
-            if event.type == pygame.QUIT:
-                pygame.quit()
-                run = False
-                quit()
+# for i in range(500):
+#     win.fill(LOGORED)
+#     if i<=100:
+#         win.blit(logo[0], (int(w/2)-168, int(h/2)-48))
+#         for event in pygame.event.get():
+#             if event.type == pygame.QUIT:
+#                 pygame.quit()
+#                 run = False
+#                 quit()
+#     elif i<200:
+#         subLength = int(w/2)-168+40
+#         subHeight = int(h/2)-40
+#         win.blit(logo[0], (int(w/2)-168, int(h/2)-48))
+#         win.blit(logo[1], (subLength, (subHeight*i / 100)-subHeight))
+#         for event in pygame.event.get():
+#             if event.type == pygame.QUIT:
+#                 pygame.quit()
+#                 run = False
+#                 quit()
+#     elif i<500:
+#         win.blit(logo[0], (int(w/2)-168, int(h/2)-48))
+#         win.blit(logo[1], (subLength, (subHeight*200 / 100)-subHeight))
+#         for event in pygame.event.get():
+#             if event.type == pygame.QUIT:
+#                 pygame.quit()
+#                 run = False
+#                 quit()
     
-    pygame.display.flip()
+#     pygame.display.flip()
 
 loadingTexts = ["LOADING IMAGES", "LOADING UI", "LOADING SOUNDS"]
 
@@ -177,11 +177,12 @@ class World:
         
 world = World()
 
+tileSize = 150
         
 class Thing(pygame.sprite.Sprite):
-    def __init__(self, x, y) -> None:
+    def __init__(self, x, y, w=50, h=50) -> None:
         super().__init__()
-        self.image = pygame.Surface((50, 50))  # Replace this with your player image
+        self.image = pygame.Surface((w, h))  # Replace this with your player image
         self.image.fill(GREEN)
         self.rect = self.image.get_rect()
         self.rect.center = (x-(self.image.get_width()/2), y-(self.image.get_height()/2))
@@ -201,18 +202,29 @@ class Player(Thing):
         super().__init__(0,0)
         self.image.fill(BLUE)
         self.rect.center = (x, y)
+        
+        self.speed = 5
 
     def update(self, deltaTime):
         self.move(deltaTime)
     def move(self, deltaTime):
         if keys[pygame.K_w]:
-            world.y -= 5*deltaTime
+            world.y -= int(self.speed * deltaTime)
         if keys[pygame.K_s]:
-            world.y += 5*deltaTime
+            world.y += int(self.speed * deltaTime)
         if keys[pygame.K_a]:
-            world.x -= 5*deltaTime
+            world.x -= int(self.speed * deltaTime)
         if keys[pygame.K_d]:
-            world.x += 5*deltaTime
+            world.x += int(self.speed * deltaTime)
+
+            
+    def collidedWithTile(self):
+        collidedTiles = pygame.sprite.groupcollide(onScreenTiles, playerSprites, False, False)
+        for tile in collidedTiles:
+            if tile.isSolid:
+                return True
+        return False
+        
             
     def resize(self):
         self.rect.x = self.rect.x+int((w-oldW)/2)
@@ -220,8 +232,13 @@ class Player(Thing):
 
 class Tile(Thing):
     def __init__(self, x, y) -> None:
-        super().__init__(x, y)
+        super().__init__(x, y, tileSize, tileSize)
         self.image.fill((random.randint(0,255), random.randint(0,255), random.randint(0,255)))
+        
+        self.isSolid = random.choice([True, False, False, False])
+        
+        if self.isSolid:
+            self.image.fill((0,0,0))
             
 
 class UICanvas:
@@ -411,6 +428,12 @@ pygame.time.delay(100)
 allSprites = AllSprites()
 
 
+player = Player(w // 2, h // 2)
+playerSprites = pygame.sprite.Group()
+playerSprites.add(player)
+
+allSprites.add(playerSprites)
+
 wallSprites = pygame.sprite.Group()
 wallSprites.add(Thing(100, 100))
 
@@ -419,26 +442,34 @@ allSprites.add(wallSprites)
 worldTiles = pygame.sprite.Group()
 for y in range(100):
     for x in range(100):
-        worldTiles.add(Tile(x*50, y*50))
+        worldTiles.add(Tile(x*tileSize, y*tileSize))
 
 allSprites.add(worldTiles)
 
 ui = UICanvas()
-# ui.addElement(UIText((20, 504), "Sample", "Hello World", 40, BLACK))
+ui.addElement(UIText((0, 0), "FPS", "", 40, BLACK))
 
-# Create player SHOULD ALWAYS BE ADDED LAST OF ALL GAMEOBJECT (AKA SPRITES
-player = Player(w // 2, h // 2)
-playerSprites = pygame.sprite.Group()
-playerSprites.add(player)
 
-allSprites.add(playerSprites)
+onScreenTiles = pygame.sprite.Group()
+
+def getOnscreenTiles():
+    global onScreenTiles
+    onScreenTiles = pygame.sprite.Group()
+    for tile in worldTiles:
+        if win.get_rect().colliderect(tile.rect):
+            onScreenTiles.add(tile)
+            
 
 def redrawScreen():
     win.fill(WHITE)
     
-    allSprites.draw(win)
+    onScreenTiles.draw(win)
+    
+    playerSprites.draw(win)
+    
     
     # Draw sprites
+    ui.getElementByTag("FPS").updateText("FPS: " + str(int(clock.get_fps())))
     ui.draw()
     #updates screen
     pygame.display.flip()
@@ -481,6 +512,8 @@ while run:
     
  # Update player and UI
     ui.update()
+    
+    getOnscreenTiles()
 
 
     #redraw win
@@ -490,5 +523,5 @@ while run:
     #await asyncio.sleep(0)
     
     # Set the framerate
-    deltaTime = clock.tick(60)/10
+    deltaTime = clock.tick()/10
 
