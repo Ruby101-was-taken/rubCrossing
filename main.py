@@ -66,8 +66,8 @@ if joystick.get_init():
         isXboxController = True
 
 # Set up the display
-win = pygame.display.set_mode((w, h), pygame.RESIZABLE) #sets up window
-pygame.display.set_caption("TITLE") #Set title
+win = pygame.display.set_mode((w, h), pygame.SCALED | pygame.RESIZABLE) #sets up window
+pygame.display.set_caption("Rub Crossing (Working Title) Version 29122023-01") #Set title
 pygame.display.set_icon(pygame.image.load('icon.png')) #Set icon
 
 logo=[pygame.image.load('logo/logosubless.png'), pygame.image.load('logo/logoSUB.png'), pygame.image.load('logo/logoBGless.png')]
@@ -118,10 +118,6 @@ win.blit(smallFont.render(loadingTexts[0], True, (255, 255, 255)), (0,200+(0*20)
 pygame.display.flip()
 
 #LOAD IMAGES 
-
-
-
-
 win.blit(smallFont.render(loadingTexts[0] + " - COMPLETED", True, (255, 255, 255)), (0,200+(0*20)))
 pygame.display.flip()
 
@@ -143,103 +139,6 @@ sound = {
 
 win.blit(smallFont.render(loadingTexts[1] + " - COMPLETED", True, (255, 255, 255)), (0,200+(2*20)))
 pygame.display.flip()
-
-class AllSprites:
-    def __init__(self) -> None:
-        self.allSprites = []
-    def resizeSprites(self):
-        for spriteGroup in self.allSprites:
-            for sprite in spriteGroup:
-                sprite.resize()
-    def add(self, spriteGroup):
-        self.allSprites.append(spriteGroup)
-    def draw(self, win):
-        for spriteGroup in self.allSprites:
-           spriteGroup.draw(win)
-    def update(self, deltaTime):
-        for spriteGroup in self.allSprites:
-            spriteGroup.update(deltaTime)
-            
-class World:
-    def __init__(self) -> None:
-        self.x = w // 2
-        self.y = h // 2
-    
-    def update(self, deltaTime):
-        if self.x < -375:
-            self.x = -375
-        elif self.x > 4575:
-            self.x = 4575
-        if self.y < -200:
-            self.y = -200
-        elif self.y > 4750:
-            self.y = 4750
-        
-world = World()
-
-tileSize = 150
-        
-class Thing(pygame.sprite.Sprite):
-    def __init__(self, x, y, w=50, h=50) -> None:
-        super().__init__()
-        self.image = pygame.Surface((w, h))  # Replace this with your player image
-        self.image.fill(GREEN)
-        self.rect = self.image.get_rect()
-        self.rect.center = (x-(self.image.get_width()/2), y-(self.image.get_height()/2))
-        
-        self.x, self.y = x, y
-    def update(self, deltaTime) -> None:
-        self.rect.x = self.x-world.x
-        self.rect.y = self.y-world.y
-        
-    def resize(self):
-        self.x = self.x+int((w-oldW)/2)
-        self.y = self.y+int((h-oldH)/2)
-    
-
-class Player(Thing):
-    def __init__(self, x, y):
-        super().__init__(0,0)
-        self.image.fill(BLUE)
-        self.rect.center = (x, y)
-        
-        self.speed = 5
-
-    def update(self, deltaTime):
-        self.move(deltaTime)
-    def move(self, deltaTime):
-        if keys[pygame.K_w]:
-            world.y -= int(self.speed * deltaTime)
-        if keys[pygame.K_s]:
-            world.y += int(self.speed * deltaTime)
-        if keys[pygame.K_a]:
-            world.x -= int(self.speed * deltaTime)
-        if keys[pygame.K_d]:
-            world.x += int(self.speed * deltaTime)
-
-            
-    def collidedWithTile(self):
-        collidedTiles = pygame.sprite.groupcollide(onScreenTiles, playerSprites, False, False)
-        for tile in collidedTiles:
-            if tile.isSolid:
-                return True
-        return False
-        
-            
-    def resize(self):
-        self.rect.x = self.rect.x+int((w-oldW)/2)
-        self.rect.y = self.rect.y+int((h-oldH)/2)
-
-class Tile(Thing):
-    def __init__(self, x, y) -> None:
-        super().__init__(x, y, tileSize, tileSize)
-        self.image.fill((random.randint(0,255), random.randint(0,255), random.randint(0,255)))
-        
-        self.isSolid = random.choice([True, False, False, False])
-        
-        if self.isSolid:
-            self.image.fill((0,0,0))
-            
 
 class UICanvas:
     def __init__(self) -> None:
@@ -423,28 +322,6 @@ class InputSystem:
 inputs = InputSystem()
 inputs.setKey(pygame.K_SPACE, "Jump")
 inputs.setButton(0, "Jump")
-pygame.time.delay(100)
-
-allSprites = AllSprites()
-
-
-player = Player(w // 2, h // 2)
-playerSprites = pygame.sprite.Group()
-playerSprites.add(player)
-
-allSprites.add(playerSprites)
-
-wallSprites = pygame.sprite.Group()
-wallSprites.add(Thing(100, 100))
-
-allSprites.add(wallSprites)
-
-worldTiles = pygame.sprite.Group()
-for y in range(100):
-    for x in range(100):
-        worldTiles.add(Tile(x*tileSize, y*tileSize))
-
-allSprites.add(worldTiles)
 
 ui = UICanvas()
 ui.addElement(UIText((0, 0), "FPS", "", 40, BLACK))
@@ -452,31 +329,81 @@ ui.addElement(UIText((0, 0), "FPS", "", 40, BLACK))
 
 onScreenTiles = pygame.sprite.Group()
 
-def getOnscreenTiles():
-    global onScreenTiles
-    onScreenTiles = pygame.sprite.Group()
-    for tile in worldTiles:
-        if win.get_rect().colliderect(tile.rect):
-            onScreenTiles.add(tile)
-            
+class GlobalVariables:
+    def __init__(self) -> None:
+        self.defaultObjectSize = 50
+
+globalVariables = GlobalVariables()
+
+class GameObject:
+    def __init__(self, x, y) -> None:
+        self.x = x
+        self.y = y
+        
+        self.screenX = x
+        self.screenY = y
+        
+        self.components = []
+    def addComponent(self, component):
+        component.gameObject = self
+        self.components.append(component)
+    def getComponent(self, componentType):
+        for component in self.components:
+            if type(component) == componentType:
+                return component
+        return None
+    def hasComponent(self, componentType):
+        for component in self.components:
+            if type(component) == componentType:
+                return True
+        return False
+    def update(self, deltaTime):
+        for component in self.components:
+            component.update(deltaTime)
+    def draw(self, win):
+        if self.hasComponent(Renderer):
+            self.getComponent(Renderer).draw(win)
+    def moveWithResize(self, oldW, oldH):
+        self.screenX = int(self.x * (win.get_width() / w))
+        self.screenY = int(self.y * (win.get_height() / h))
+        
+class Component:
+    def __init__(self) -> None:
+        pass
+    def update(self, deltaTime):
+        pass
+
+class Renderer(Component):
+    def __init__(self, image=None, w=50, h=50, colour=BLUE) -> None:
+        super().__init__()
+        self.surface = pygame.Surface((w, h))
+        if image == None:
+            self.surface.fill(colour)
+        else:
+            self.surface = image
+    def draw(self, win):
+        win.blit(self.surface, (self.gameObject.x, self.gameObject.y))
+    
+test = GameObject(20, 20)
+test.addComponent(Renderer(None))
+        
 
 def redrawScreen():
     win.fill(WHITE)
     
-    onScreenTiles.draw(win)
-    
-    playerSprites.draw(win)
-    
+    test.draw(win)
     
     # Draw sprites
     ui.getElementByTag("FPS").updateText("FPS: " + str(int(clock.get_fps())))
     ui.draw()
+    
     #updates screen
     pygame.display.flip()
 
 deltaTime = 0
 run = True
 sizeMultiplierW, sizeMultiplierH = 1, 1
+
 # Main game loop
 while run:
     
@@ -487,34 +414,20 @@ while run:
             quit()
         elif event.type == pygame.MOUSEWHEEL:
             scrolly = event.y
-        elif event.type == pygame.WINDOWRESIZED:
-            oldW, oldH = w, h
-            w = event.x if event.x>minW else minW
-            h = event.y if event.y>minH else minH
-            win = pygame.display.set_mode((w, h), pygame.RESIZABLE)
             
-            sizeMultiplierW, sizeMultiplierH = w/oldW, h/oldH
             
-            allSprites.resizeSprites()
-            
-
+    test.update(deltaTime)
     
     #mouse getters
     clicked = pygame.mouse.get_pressed(num_buttons=3)
     posx, posy = pygame.mouse.get_pos()
     #get pressed keys
     keys = pygame.key.get_pressed()
-
-    allSprites.update(deltaTime)
-    
-    world.update(deltaTime)
     
     
  # Update player and UI
     ui.update()
     
-    getOnscreenTiles()
-
 
     #redraw win
     redrawScreen()
