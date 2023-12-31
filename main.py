@@ -3,6 +3,7 @@ import pygame, os, random, copy
 
 from pygame.sprite import Group, Sprite
 
+from components import *
 
 os.system("cls")
 
@@ -71,7 +72,7 @@ pygame.display.set_caption("Rub Crossing (Working Title) Version 29122023-01") #
 pygame.display.set_icon(pygame.image.load('icon.png')) #Set icon
 
 logo=[pygame.image.load('logo/logosubless.png'), pygame.image.load('logo/logoSUB.png'), pygame.image.load('logo/logoBGless.png')]
-
+keys = pygame.key.get_pressed()
 # for i in range(500):
 #     win.fill(LOGORED)
 #     if i<=100:
@@ -320,8 +321,10 @@ class InputSystem:
             joystick.rumble(lf, hf, dur)
 
 inputs = InputSystem()
-inputs.setKey(pygame.K_SPACE, "Jump")
-inputs.setButton(0, "Jump")
+inputs.setKey(pygame.K_a, "left")
+inputs.setKey(pygame.K_d, "right")
+inputs.setKey(pygame.K_w, "up")
+inputs.setKey(pygame.K_s, "down")
 
 ui = UICanvas()
 ui.addElement(UIText((0, 0), "FPS", "", 40, BLACK))
@@ -331,17 +334,43 @@ onScreenTiles = pygame.sprite.Group()
 
 class GlobalVariables:
     def __init__(self) -> None:
-        self.defaultObjectSize = 50
+        self.defaultObjectSize = 32
 
 globalVariables = GlobalVariables()
+
+
+class Game:
+    def __init__(self) -> None:
+        self.camera = Camera(0,0)
+        self.gameObjects = []
+        self.addGameObject(self.camera)
+    def addGameObject(self, gameObject):
+        gameObject.game = self
+        self.gameObjects.append(gameObject)
+    def update(self, deltaTime):
+        for gameObject in self.gameObjects:
+            if gameObject.isActive:
+                gameObject.update(deltaTime)
+    def draw(self, win):
+        for gameObject in self.gameObjects:
+            if gameObject.hasComponent(Renderer):
+                if gameObject.isActive and gameObject.getComponent(Renderer).isVisible:
+                    gameObject.draw(win)
+    def getAll(self, gameObjectType):
+        returnList = []
+        for gameObject in self.gameObjects:
+            if type(gameObject) == gameObjectType:
+                returnList.append(gameObject)
+        return returnList
+                
+    
 
 class GameObject:
     def __init__(self, x, y) -> None:
         self.x = x
         self.y = y
         
-        self.screenX = x
-        self.screenY = y
+        self.isActive = True
         
         self.components = []
     def addComponent(self, component):
@@ -363,35 +392,71 @@ class GameObject:
     def draw(self, win):
         if self.hasComponent(Renderer):
             self.getComponent(Renderer).draw(win)
-    def moveWithResize(self, oldW, oldH):
-        self.screenX = int(self.x * (win.get_width() / w))
-        self.screenY = int(self.y * (win.get_height() / h))
         
-class Component:
-    def __init__(self) -> None:
-        pass
+class Camera(GameObject): #yea so this is a game object or something idk how the camera will work but I will make it work
+    def __init__(self, x, y) -> None:
+        super().__init__(x, y)
+        self.lockOn = player
     def update(self, deltaTime):
-        pass
+        self.x = self.lockOn.x-400+self.lockOn.getComponent(Renderer).w/2
+        self.y = self.lockOn.y-225+self.lockOn.getComponent(Renderer).h/2
+        return super().update(deltaTime)
 
-class Renderer(Component):
-    def __init__(self, image=None, w=50, h=50, colour=BLUE) -> None:
-        super().__init__()
-        self.surface = pygame.Surface((w, h))
-        if image == None:
-            self.surface.fill(colour)
-        else:
-            self.surface = image
-    def draw(self, win):
-        win.blit(self.surface, (self.gameObject.x, self.gameObject.y))
+class Test(GameObject):
+    def __init__(self, x, y) -> None:
+        super().__init__(x, y)
+        self.addComponent(Renderer(None))
+        self.addComponent(SquareCollider(32, 32))
+
+class Player(GameObject):
+    def __init__(self, x, y) -> None:
+        super().__init__(x, y)
+        self.speed = 2
+        self.addComponent(Renderer(pygame.image.load("player.png")))
+        self.addComponent(SquareCollider(32, 32))
+    def update(self, deltaTime):
+        walls = self.game.getAll(Test)
+        if inputs.inputEvent("left"):
+            self.x -= self.speed*deltaTime
+        if inputs.inputEvent("right"):
+            self.x += self.speed*deltaTime
+        
+        for wall in walls:
+            if wall.getComponent(SquareCollider).checkCollision(self.getComponent(SquareCollider)):
+                colliding = True
+                if inputs.inputEvent("left"):
+                    self.x=wall.x+32
+                if inputs.inputEvent("right"):
+                    self.x=wall.x-32
+            
+        if inputs.inputEvent("up"):
+            self.y -= self.speed*deltaTime
+        if inputs.inputEvent("down"):
+            self.y += self.speed*deltaTime
+            
+        for wall in walls:
+            if wall.getComponent(SquareCollider).checkCollision(self.getComponent(SquareCollider)):
+                colliding = True
+                if inputs.inputEvent("up"):
+                    self.y=wall.y+32
+                if inputs.inputEvent("down"):
+                    self.y=wall.y-32
+        
+        
+        super().update(deltaTime)
     
-test = GameObject(20, 20)
-test.addComponent(Renderer(None))
+player = Player(0,0)
+game = Game()
+
+game.addGameObject(Test(20,20))
+game.addGameObject(Test(70,70))
+game.addGameObject(player)
         
 
 def redrawScreen():
     win.fill(WHITE)
     
-    test.draw(win)
+    game.draw(win)
     
     # Draw sprites
     ui.getElementByTag("FPS").updateText("FPS: " + str(int(clock.get_fps())))
@@ -415,8 +480,9 @@ while run:
         elif event.type == pygame.MOUSEWHEEL:
             scrolly = event.y
             
-            
-    test.update(deltaTime)
+    
+    game.update(deltaTime)    
+
     
     #mouse getters
     clicked = pygame.mouse.get_pressed(num_buttons=3)
