@@ -4,6 +4,7 @@ import pygame, os, random, copy
 from pygame.sprite import Group, Sprite
 
 from components import *
+from gameObjects import *
 
 os.system("cls")
 
@@ -338,23 +339,30 @@ class GlobalVariables:
 
 globalVariables = GlobalVariables()
 
-
+# holds all the shit
 class Game:
     def __init__(self) -> None:
         self.camera = Camera(0,0)
         self.gameObjects = []
         self.addGameObject(self.camera)
+        self.input = inputs
     def addGameObject(self, gameObject):
         gameObject.game = self
         self.gameObjects.append(gameObject)
     def update(self, deltaTime):
+        self.activeObjects = []
         for gameObject in self.gameObjects:
             if gameObject.isActive:
                 gameObject.update(deltaTime)
-    def draw(self, win):
+                self.activeObjects.append(gameObject)
+    def start(self):
         for gameObject in self.gameObjects:
+            if gameObject.isActive:
+                gameObject.start()
+    def draw(self, win):
+        for gameObject in self.activeObjects:
             if gameObject.hasComponent(Renderer):
-                if gameObject.isActive and gameObject.getComponent(Renderer).isVisible:
+                if gameObject.getComponent(Renderer).isVisible: # seperate if statement cuz if not it will crash if there's no renderer
                     gameObject.draw(win)
     def getAll(self, gameObjectType):
         returnList = []
@@ -363,37 +371,10 @@ class Game:
                 returnList.append(gameObject)
         return returnList
                 
-    
 
-class GameObject:
-    def __init__(self, x, y) -> None:
-        self.x = x
-        self.y = y
-        
-        self.isActive = True
-        
-        self.components = []
-    def addComponent(self, component):
-        component.gameObject = self
-        self.components.append(component)
-    def getComponent(self, componentType):
-        for component in self.components:
-            if type(component) == componentType:
-                return component
-        return None
-    def hasComponent(self, componentType):
-        for component in self.components:
-            if type(component) == componentType:
-                return True
-        return False
-    def update(self, deltaTime):
-        for component in self.components:
-            component.update(deltaTime)
-    def draw(self, win):
-        if self.hasComponent(Renderer):
-            self.getComponent(Renderer).draw(win)
-        
-class Camera(GameObject): #yea so this is a game object or something idk how the camera will work but I will make it work
+# yea so this is a game object or something idk how the camera will work but I will make it work
+# also it has to be in here cuz it refers to player and I could make it not do that and work better but nah this is easier
+class Camera(GameObject): 
     def __init__(self, x, y) -> None:
         super().__init__(x, y)
         self.lockOn = player
@@ -401,55 +382,21 @@ class Camera(GameObject): #yea so this is a game object or something idk how the
         self.x = self.lockOn.x-400+self.lockOn.getComponent(Renderer).w/2
         self.y = self.lockOn.y-225+self.lockOn.getComponent(Renderer).h/2
         return super().update(deltaTime)
+  
 
-class Test(GameObject):
-    def __init__(self, x, y) -> None:
-        super().__init__(x, y)
-        self.addComponent(Renderer(None))
-        self.addComponent(SquareCollider(32, 32))
-
-class Player(GameObject):
-    def __init__(self, x, y) -> None:
-        super().__init__(x, y)
-        self.speed = 2
-        self.addComponent(Renderer(pygame.image.load("player.png")))
-        self.addComponent(SquareCollider(32, 32))
-    def update(self, deltaTime):
-        walls = self.game.getAll(Test)
-        if inputs.inputEvent("left"):
-            self.x -= self.speed*deltaTime
-        if inputs.inputEvent("right"):
-            self.x += self.speed*deltaTime
-        
-        for wall in walls:
-            if wall.getComponent(SquareCollider).checkCollision(self.getComponent(SquareCollider)):
-                colliding = True
-                if inputs.inputEvent("left"):
-                    self.x=wall.x+32
-                if inputs.inputEvent("right"):
-                    self.x=wall.x-32
-            
-        if inputs.inputEvent("up"):
-            self.y -= self.speed*deltaTime
-        if inputs.inputEvent("down"):
-            self.y += self.speed*deltaTime
-            
-        for wall in walls:
-            if wall.getComponent(SquareCollider).checkCollision(self.getComponent(SquareCollider)):
-                colliding = True
-                if inputs.inputEvent("up"):
-                    self.y=wall.y+32
-                if inputs.inputEvent("down"):
-                    self.y=wall.y-32
-        
-        
-        super().update(deltaTime)
     
 player = Player(0,0)
 game = Game()
 
-game.addGameObject(Test(20,20))
-game.addGameObject(Test(70,70))
+allTiles = []
+for y in range(50):
+    for x in range(50):
+        newTile = Tile(x*32,y*32)
+        newTile.game = game
+        allTiles.append(newTile)
+
+game.addGameObject(World(allTiles))
+
 game.addGameObject(player)
         
 
@@ -468,6 +415,8 @@ def redrawScreen():
 deltaTime = 0
 run = True
 sizeMultiplierW, sizeMultiplierH = 1, 1
+
+game.start()
 
 # Main game loop
 while run:
@@ -502,5 +451,5 @@ while run:
     #await asyncio.sleep(0)
     
     # Set the framerate
-    deltaTime = clock.tick()/10
+    deltaTime = clock.tick(59)/10
 

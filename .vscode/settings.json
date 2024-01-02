@@ -4,6 +4,7 @@
         "collidepoint",
         "posx",
         "pygame",
-        "scrolly"
+        "scrolly",
+        "seperate"
     ]
 }
