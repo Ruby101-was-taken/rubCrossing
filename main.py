@@ -1,10 +1,11 @@
 from typing import Any
-import pygame, os, random, copy
+import pygame, os, random, copy, json
 
 from pygame.sprite import Group, Sprite
 
 from components import *
 from gameObjects import *
+from tiles import *
 
 os.system("cls")
 
@@ -15,7 +16,7 @@ os.system("cls")
 # Define colors
 BLACK = (0, 0, 0)
 RED = (255, 0, 0)
-BLUE = (0, 0, 255)
+BLUE = (0, 0, 255) 
 GREEN = (0, 255, 0)
 YELLOW = (255, 255, 0)
 PINK = (255, 192, 203)
@@ -69,7 +70,7 @@ if joystick.get_init():
 
 # Set up the display
 win = pygame.display.set_mode((w, h), pygame.SCALED | pygame.RESIZABLE) #sets up window
-pygame.display.set_caption("Rub Crossing (Working Title) Version 29122023-01") #Set title
+pygame.display.set_caption("Rub Crossing (Working Title) Version 16012024-01") #Set title
 pygame.display.set_icon(pygame.image.load('icon.png')) #Set icon
 
 logo=[pygame.image.load('logo/logosubless.png'), pygame.image.load('logo/logoSUB.png'), pygame.image.load('logo/logoBGless.png')]
@@ -286,6 +287,15 @@ class InputSystem:
         self.inputDict = {}
         self.controllerDict = {}
         self.axisDict = {}
+        self.posx = 0
+        self.posy = 0
+        self.worldX = 0
+        self.worldY = 0
+        self.clicked = [False, False, False]
+        self.clickDown = [False, False, False]
+        self.scrolly = 0
+        
+        self.heldEvents = []
     def setKey(self, keyEnum, inputName:str):
         if inputName in self.inputDict:
             self.inputDict[inputName].append(keyEnum)
@@ -301,22 +311,33 @@ class InputSystem:
             self.axisDict[inputName].append([axis, axisRange])
         else:
             self.axisDict[inputName] = [[axis, axisRange]]
-    def inputEvent(self, inputName:str) -> bool:
+    def inputEvent(self, inputName:str, canHold=True) -> bool:
         inputted = False
-        if inputName in self.inputDict:
+        careForHold = (not inputName in self.heldEvents or canHold)
+        if inputName in self.inputDict and careForHold:
             for keyEnum in self.inputDict[inputName]:
                 if keys[keyEnum]:
                     inputted = True
         if joystick.get_init():
-            if not inputted and inputName in self.controllerDict:
+            if not inputted and inputName in self.controllerDict and careForHold:
                 for button in self.controllerDict[inputName]:
                     if joystick.get_button(button):
                         inputted = True
-            if not inputted and inputName in self.axisDict:
+            if not inputted and inputName in self.axisDict and careForHold:
                 for axis in self.axisDict[inputName]:
                     if joystick.get_axis(axis[0]) > axis[1][0] and joystick.get_axis(axis[0]) < axis[1][1]:
                         inputted = True
+                        
+        if inputted and not canHold:
+            self.heldEvents.append(inputName)
         return inputted
+    def resetHeldInputs(self):
+        heldEventAfter = []
+        for event in self.heldEvents:
+            if self.inputEvent(event, True):
+                heldEventAfter.append(event)
+        self.heldEvents = copy.copy(heldEventAfter)
+                
     def rumble(self, lf, hf, dur):
         if joystick.get_init():
             joystick.rumble(lf, hf, dur)
@@ -327,11 +348,14 @@ inputs.setKey(pygame.K_d, "right")
 inputs.setKey(pygame.K_w, "up")
 inputs.setKey(pygame.K_s, "down")
 
+inputs.setKey(pygame.K_e, "inventory")
+inputs.setKey(pygame.K_r, "inventory2")
+
 ui = UICanvas()
 ui.addElement(UIText((0, 0), "FPS", "", 40, BLACK))
+ui.addElement(UIText((0, 40), "Item", "", 40, BLACK))
 
 
-onScreenTiles = pygame.sprite.Group()
 
 class GlobalVariables:
     def __init__(self) -> None:
@@ -339,6 +363,7 @@ class GlobalVariables:
 
 globalVariables = GlobalVariables()
 
+from gameManager import GameManger
 # holds all the shit
 class Game:
     def __init__(self) -> None:
@@ -346,6 +371,11 @@ class Game:
         self.gameObjects = []
         self.addGameObject(self.camera)
         self.input = inputs
+        self.gameManager = GameManger()
+        
+        self.swipeTimer = 0
+        
+        self.worlds = {}
     def addGameObject(self, gameObject):
         gameObject.game = self
         self.gameObjects.append(gameObject)
@@ -355,6 +385,13 @@ class Game:
             if gameObject.isActive:
                 gameObject.update(deltaTime)
                 self.activeObjects.append(gameObject)
+                
+        if self.swipeTimer>0:
+            self.gameManager.inInventory = False
+            self.swipeTimer-=deltaTime*2
+            if self.swipeTimer<=0:
+                self.gameManager.swipe = False
+                self.swipeTimer = 0
     def start(self):
         for gameObject in self.gameObjects:
             if gameObject.isActive:
@@ -364,12 +401,46 @@ class Game:
             if gameObject.hasComponent(Renderer):
                 if gameObject.getComponent(Renderer).isVisible: # seperate if statement cuz if not it will crash if there's no renderer
                     gameObject.draw(win)
+        player.draw(win)
+        
+        
+        if self.swipeTimer > 0:
+            screenPercent = self.swipeTimer/100
+            pygame.draw.rect(win, BLACK, pygame.Rect(((w*2)*screenPercent)-w, 0, w, h))
+        
     def getAll(self, gameObjectType):
         returnList = []
         for gameObject in self.gameObjects:
             if type(gameObject) == gameObjectType:
                 returnList.append(gameObject)
         return returnList
+    
+    def addWorld(self, worldName, world):
+        self.addGameObject(world)
+        world.isActive = False
+        self.worlds[worldName] = world
+        world.name = worldName
+    def setWorld(self, worldName, doSwipe = True, teleportplayer = True):
+        self.gameManager.swipe = True
+        
+        if self.swipeTimer==0 and doSwipe:
+            self.swipeTimer = 100
+        elif self.swipeTimer <=50 or not doSwipe:
+        
+            self.world.isActive = False
+            self.world = self.worlds[worldName]
+            if teleportplayer:
+                self.player.x = self.world.spawnLocation[0]
+                self.player.y = self.world.spawnLocation[1]
+            self.camera.update(1)
+            self.world.getComponent(Renderer).isVisible = True
+            self.world.isActive = True
+            self.world.start()
+            
+            if not doSwipe:
+                self.gameManager.swipe = False
+        
+        
                 
 
 # yea so this is a game object or something idk how the camera will work but I will make it work
@@ -381,33 +452,70 @@ class Camera(GameObject):
     def update(self, deltaTime):
         self.x = self.lockOn.x-400+self.lockOn.getComponent(Renderer).w/2
         self.y = self.lockOn.y-225+self.lockOn.getComponent(Renderer).h/2
+        
+        self.x = round(self.x, 1)
+        self.y = round(self.y, 1)
+        
+        
         return super().update(deltaTime)
-  
+
+
+save_file = "player.json"
+if not os.path.exists(save_file):
+    saveData = {"player_x": 736, 
+                "player_y": 64,
+                "currentRoom": "shop"
+                }
+    with open(save_file, "w") as file:
+        json.dump(saveData, file)
+    
+with open(save_file, "r") as file:
+    saveData = json.load(file)
+    playerX = saveData["player_x"]
+    playerY = saveData["player_y"]
+    currentRoom = saveData["currentRoom"]
+
 
     
-player = Player(0,0)
+player = Player(playerX, playerY)
 game = Game()
 
-allTiles = []
-for y in range(50):
-    for x in range(50):
-        newTile = Tile(x*32,y*32)
-        newTile.game = game
-        allTiles.append(newTile)
-
-game.addGameObject(World(allTiles))
-
+game.player = player
 game.addGameObject(player)
         
 
+shop = World(25,15, (736, 64))
+game.world = shop
+newTile = TransportTile(736,24)
+newTile.simpleSetTile(Tiles.EnterStorageDoor)
+shop.allTiles.append(newTile)
+game.addWorld("shop", shop)
+
+storage = World(10,10, (256, 224))
+newTile = TransportTile(256,256, "shop")
+newTile.simpleSetTile(Tiles.EnterShopDoor)
+storage.allTiles.append(newTile)
+game.addWorld("storage", storage)
+
+
+game.setWorld(currentRoom, False, False)
+
 def redrawScreen():
-    win.fill(WHITE)
+    win.fill("#0094FF")
     
     game.draw(win)
     
+    
+    # pygame.draw.rect(win, RED, player.range)
+    
+    # player.draw(win)
+    
     # Draw sprites
     ui.getElementByTag("FPS").updateText("FPS: " + str(int(clock.get_fps())))
+    ui.getElementByTag("Item").show = player.inventory.inventory[player.heldItem] != None
+    ui.getElementByTag("Item").updateText("Item: " + player.inventory.inventory[player.heldItem].value.name if ui.getElementByTag("Item").show else "")
     ui.draw()
+    
     
     #updates screen
     pygame.display.flip()
@@ -416,26 +524,34 @@ deltaTime = 0
 run = True
 sizeMultiplierW, sizeMultiplierH = 1, 1
 
+game.addGameObject(HighLight(0,0))
+
 game.start()
 
 # Main game loop
 while run:
-    
+    scrolly = 0
     for event in pygame.event.get():
         if event.type == pygame.QUIT:
-            pygame.quit()
             run = False
-            quit()
         elif event.type == pygame.MOUSEWHEEL:
             scrolly = event.y
-            
+    
+    inputs.scrolly = scrolly
     
     game.update(deltaTime)    
 
-    
+    for clickState in range(len(inputs.clickDown)):
+        if inputs.clickDown[clickState]:
+            inputs.clickDown[clickState] = clicked[clickState]
+    inputs.resetHeldInputs()
     #mouse getters
     clicked = pygame.mouse.get_pressed(num_buttons=3)
+    
     posx, posy = pygame.mouse.get_pos()
+    inputs.posx, inputs.posy = posx, posy
+    inputs.worldX, inputs.worldY = posx+game.camera.x, posy+game.camera.y
+    inputs.clicked = clicked
     #get pressed keys
     keys = pygame.key.get_pressed()
     
@@ -450,6 +566,17 @@ while run:
     #for web version
     #await asyncio.sleep(0)
     
-    # Set the framerate
-    deltaTime = clock.tick(59)/10
 
+    
+    # Set the framerate
+    deltaTime = clock.tick()/10
+    
+    
+pygame.quit()
+    
+saveData["player_x"] = player.x
+saveData["player_y"] = player.y
+saveData["currentRoom"] = game.world.name
+
+with open(save_file, "w") as file:
+    json.dump(saveData, file)
