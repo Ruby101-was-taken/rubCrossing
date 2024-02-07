@@ -156,6 +156,16 @@ class TransportTile(Tile):
         if self.squareCollider.checkCollision(self.game.player):
             self.game.setWorld(self.worldName)
         return super().update(deltaTime)
+    
+class InteractTile(Tile):
+    def __init__(self, x, y, interaction) -> None:
+        super().__init__(x, y)
+        self.interaction = interaction
+    def update(self, deltaTime):
+        if self.squareCollider.checkPoint((self.game.input.worldX, self.game.input.worldY)) and self.game.input.clicked[0] and not self.game.input.clickDown[0] and self.game.player.range.collidepoint((self.game.input.posx, self.game.input.posy)):
+            self.interaction(self)
+            self.game.input.clickDown[0] = True
+        return super().update(deltaTime)
             
          
 class Player(GameObject):
@@ -165,7 +175,7 @@ class Player(GameObject):
         self.addComponent(Renderer(pygame.image.load("resources/player/idle.png")))
         self.addComponent(SquareCollider(20, 28, (5,2)))
         self.heldItem = 0
-        self.inventory = Inventory(10)
+        self.inventory = Inventory(72)
         self.addComponent(AnimationHandler(self.getComponent(Renderer)))
         
         self.range = pygame.Rect(336,161, 128, 128)
@@ -179,14 +189,15 @@ class Player(GameObject):
     def update(self, deltaTime):
         walls = [tile for tile in self.game.world.allTiles if tile.isSolid]
         if not self.game.gameManager.inMenu and not self.game.gameManager.swipe:
+            speed = 0 if self.speed*deltaTime > 19 else self.speed
             isWalkingSide = False
             if self.game.input.inputEvent("left"):
-                self.x -= self.speed*deltaTime
+                self.x -= speed*deltaTime
                 isWalkingSide = True
                 if not self.renderer.flipX:
                     self.renderer.setFlip(True)
             if self.game.input.inputEvent("right"):
-                self.x += self.speed*deltaTime
+                self.x += speed*deltaTime
                 isWalkingSide = True
                 if self.renderer.flipX:
                     self.renderer.setFlip(False)
@@ -203,10 +214,10 @@ class Player(GameObject):
             
             isWalkingUp = False
             if self.game.input.inputEvent("up"):
-                self.y -= self.speed*deltaTime
+                self.y -= speed*deltaTime
                 isWalkingUp = True
             if self.game.input.inputEvent("down"):
-                self.y += self.speed*deltaTime
+                self.y += speed*deltaTime
                 isWalkingUp = True
                 
             for wall in walls:
@@ -260,7 +271,7 @@ class Player(GameObject):
                 self.game.world.allTiles.append(newTile)
                 newTile.setTile(self.inventory.inventory[self.heldItem])
                 #  remove item after place
-                self.inventory.inventory.pop(self.heldItem)
+                self.inventory.inventory[self.heldItem] = None
                 self.heldItem = 0
                 self.game.input.clickDown[0] = True
                 
@@ -268,10 +279,10 @@ class Player(GameObject):
         placeX = int((self.game.input.worldX)/32)   
         placeY = int((self.game.input.worldY)/32)
         if self.game.world.isTile(placeX*32, placeY*32):
-            if self.game.world.getTile(placeX*32, placeY*32).canPickUp:
-                self.inventory.inventory.append(copy.copy(self.game.world.getTile(placeX*32, placeY*32).tileType))
-                self.game.world.removeTile(placeX*32, placeY*32)
-                self.game.input.clickDown[0] = True
+            if self.game.world.getTile(placeX*32, placeY*32).canPickUp and self.range.collidepoint((self.game.input.posx, self.game.input.posy)):
+                if self.get(self.game.world.getTile(placeX*32, placeY*32).tileType):
+                    self.game.world.removeTile(placeX*32, placeY*32)
+                    self.game.input.clickDown[0] = True
         # el
         # if 0 < placeX < 50 and 0 < placeY < 50:
         #     if not self.game.world.getTile(placeX*32, placeY*32).getComponent(SquareCollider).checkCollision(self.getComponent(SquareCollider)):
@@ -282,6 +293,13 @@ class Player(GameObject):
         #         #  remove item after place
         #         self.inventory.pop(self.heldItem)
         #         self.heldItem = 0
+        
+        
+    def get(self, item) -> bool:
+        if not self.inventory.atCapacity():
+            self.inventory.getItem(item)
+            return True
+        return False
             
                 
 class HighLight(GameObject):
@@ -312,8 +330,10 @@ class HighLight(GameObject):
 class Inventory(GameObject):
     def __init__(self, maxCapacity) -> None:
         super().__init__(0, 0)
-        self.inventory = [None, Tiles.RatStatue]
         self.maxCapacity = maxCapacity
+        self.inventory = [None]
+        for slot in range(self.maxCapacity):
+            self.inventory.append(None)
         self.baseSurf = pygame.image.load("resources/ui/inventory.png")
         self.addComponent(Renderer(self.updateInventory()))
         self.getComponent(Renderer).isVisible = False
@@ -322,7 +342,7 @@ class Inventory(GameObject):
         self.x = self.game.camera.x+172
         self.y = self.game.camera.y
         
-        if self.game.input.inputEvent("inventory", False) and not self.game.gameManager.swipe:
+        if self.game.input.inputEvent("inventory", False) and not self.game.gameManager.swipe and not self.game.gameManager.inShop:
             self.getComponent(Renderer).setImage(self.updateInventory())
             self.game.gameManager.inInventory = not self.game.gameManager.inInventory
             self.getComponent(Renderer).isVisible = self.game.gameManager.inInventory
@@ -331,18 +351,33 @@ class Inventory(GameObject):
         super().update(deltaTime)
     
     def updateInventory(self):
-        invSurf = copy.copy(self.baseSurf)
+        #invSurf = copy.copy(self.baseSurf)
+        invSurf = pygame.Surface((self.baseSurf.get_width(),self.baseSurf.get_height()))
+        invSurf.blit(self.baseSurf, (0,0))
         item = 1 if len(self.inventory)>1 else 0
         for y in range(6):
             for x in range(12):
+                pygame.draw.circle(invSurf, (255, 144, 0), ((32*x)+16, (32*y)+16), 16, 3)
                 if self.inventory[item] != None:
                     if not self.inventory[item].value.fileName in tileImages:
                         tileImages[self.inventory[item].value.fileName] = pygame.image.load(f"resources/tiles/{self.inventory[item].value.fileName}.png")
                     invSurf.blit(tileImages[self.inventory[item].value.fileName], (32*x, 32*y))
+                    #invSurf = tileImages[self.inventory[item].value.fileName]
                 item+=1
             
                 if item==len(self.inventory):
                     return invSurf 
+    def atCapacity(self) -> bool:
+        for slot in range(len(self.inventory)):
+            if self.inventory[slot] == None and slot!=0:
+                return False
+        return True
+    
+    def getItem(self, item):
+        for slot in range(len(self.inventory)):
+            if self.inventory[slot] == None and slot!=0:
+                self.inventory[slot] = item
+                return 0 
           
 
 

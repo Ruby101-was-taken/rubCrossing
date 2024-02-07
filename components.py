@@ -76,6 +76,12 @@ class SquareCollider(Component):
         
         return (left < otherRight and right > otherLeft and top < otherBottom and bottom > otherTop)
 
+    def checkPoint(self, point):
+        pos = (self.gameObject.x+self.offset[0], self.gameObject.y+self.offset[1])
+        
+        [left, right, top, bottom] = [pos[0], pos[0]+self.w, pos[1], pos[1]+self.h]
+        return left < point[0] < right and top < point[1] < bottom
+
 class AnimationHandler(Component):
     def __init__(self, renderer) -> None:
         super().__init__()

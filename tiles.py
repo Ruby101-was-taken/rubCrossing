@@ -26,13 +26,6 @@ class Tiles(Enum):
     EnterStorageDoor = Item("Storage Door", "door", False, False, Door("storage"))
     EnterShopDoor = Item("Shop Door", "door", False, False, Door("shop"))
     
-    # TopWall = Item("Top Wall", "topWall", True, False)
-    # RightWall = Item("Right Wall", "rightWall", True, False)
-    # LeftWall = Item("Left Wall", "leftWall", True, False)
-    # BottomWall = Item("Bottom Wall", "bottomWall", True, False)
+    Computer = Item("Computer", "computer", True, False)
     
-    # LeftTopWall = Item("Left Top Wall", "leftTopWall", True, False)
-    # RightTopWall = Item("Right Top Wall", "rightTopWall", True, False)
-    # LeftBottomWall = Item("Bottom Bottom Wall", "leftBottomWall", True, False)
-    # RightBottomWall = Item("Left Bottom Wall", "rightBottomWall", True, False)
     
